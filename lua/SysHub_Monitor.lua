@@ -35,19 +35,48 @@ end
 
 -- ============================================================
 -- REQUEST HELPER
--- pakai HttpService:RequestAsync langsung (bypass fakeReq)
+-- coba semua method executor: http_request, request, syn.request
+-- fallback ke HttpService:RequestAsync
 -- ============================================================
 local function doRequest(url, method, headers, body)
+    local opts = {
+        Url     = url,
+        Method  = method or "POST",
+        Headers = headers or {},
+        Body    = body or "",
+    }
+
+    -- http_request (Real, Fluxus, KRNL, dll)
+    if http_request then
+        local ok, res = pcall(http_request, opts)
+        if ok and res and (res.StatusCode or 0) > 0 then return res end
+    end
+
+    -- request (Delta, Wave, dll)
+    if request then
+        local ok, res = pcall(request, opts)
+        if ok and res and (res.StatusCode or 0) > 0 then return res end
+    end
+
+    -- syn.request (Synapse)
+    if syn and syn.request then
+        local ok, res = pcall(syn.request, opts)
+        if ok and res and (res.StatusCode or 0) > 0 then return res end
+    end
+
+    -- http.request
+    if http and http.request then
+        local ok, res = pcall(http.request, opts)
+        if ok and res and (res.StatusCode or 0) > 0 then return res end
+    end
+
+    -- fallback HttpService:RequestAsync
     local hs2 = game:GetService("HttpService")
     local ok, res = pcall(function()
-        return hs2:RequestAsync({
-            Url     = url,
-            Method  = method or "POST",
-            Headers = headers or {},
-            Body    = body or "",
-        })
+        return hs2:RequestAsync(opts)
     end)
     if ok and res and (res.StatusCode or 0) > 0 then return res end
+
     return nil
 end
 
