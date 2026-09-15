@@ -98,3 +98,33 @@ end
 
 print("Executing...")
 fn()
+
+-- ── Auto-load SysHub Monitor setelah payload berhasil ────────
+task.delay(6, function()
+    pcall(function()
+        local monitor_url = "https://raw.githubusercontent.com/Galangpratama-rox/Decode-Sys/main/lua/SysHub_Monitor.lua"
+        local mon_src
+        if http_request then
+            local r = http_request({Url=monitor_url, Method="GET"})
+            mon_src = r and r.Body
+        elseif request then
+            local r = request({Url=monitor_url, Method="GET"})
+            mon_src = r and r.Body
+        elseif syn and syn.request then
+            local r = syn.request({Url=monitor_url, Method="GET"})
+            mon_src = r and r.Body
+        else
+            mon_src = game:HttpGet(monitor_url, true)
+        end
+        if mon_src and #mon_src > 100 then
+            local mfn, merr = loadstring(mon_src)
+            if mfn then
+                mfn()
+            else
+                warn("[SysHub] Monitor loadstring error: " .. tostring(merr))
+            end
+        else
+            warn("[SysHub] Gagal download monitor script")
+        end
+    end)
+end)
