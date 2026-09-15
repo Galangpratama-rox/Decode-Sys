@@ -6,36 +6,47 @@
 local raw = readfile("syshub_intercept_2.lua")
 print("Raw len: " .. #raw)
 
--- response formatnya JSON: {"status":"success","message":"Login Success","script":"..."}
--- extract field "script"
-local script = raw:match('"script"%s*:%s*"(.*)"[^"]*}%s*$')
-if not script then
-    -- coba pattern yang lebih relaxed
-    script = raw:match('"script"%s*:%s*"(.+)')
-    if script then
-        -- trim trailing "} dan whitespace
-        script = script:match('^(.-)\\?"?%s*}?%s*$') or script
-        -- remove trailing quote+brace
-        script = script:gsub('"[^"]*}%s*$', '')
-    end
+-- JSON formatnya: {"status":"success","message":"...","script":"<LUA CODE>"}
+-- field "script" dimulai setelah  "script":"  dan diakhiri dengan  "}
+-- karena isi script sangat panjang, kita cari posisi awal dan akhirnya
+
+local startMarker = '"script":"'
+local startPos = raw:find(startMarker, 1, true)
+
+if not startPos then
+    error("Tidak ditemukan field 'script' di response!")
 end
 
-if not script then
-    print("Gagal parse JSON, coba raw loadstring...")
-    script = raw
+-- posisi awal konten script (setelah marker)
+local contentStart = startPos + #startMarker
+
+-- cari akhir: karakter " yang tidak di-escape (diawali bukan \)
+-- scan dari belakang — JSON diakhiri  ..."}
+-- cara paling simpel: potong dari akhir, hapus  "}
+local contentRaw = raw:sub(contentStart)
+
+-- hapus trailing  "}  atau  "}  dengan whitespace
+contentRaw = contentRaw:match('^(.*)"[^"]*}%s*$') or contentRaw:match('^(.*)"[}]%s*$') or contentRaw
+
+-- kalau masih ada trailing quote, hapus
+if contentRaw:sub(-1) == '"' then
+    contentRaw = contentRaw:sub(1, -2)
 end
 
--- unescape JSON
-script = script:gsub('\\"', '"')
+print("Raw script len: " .. #contentRaw)
+
+-- unescape JSON string
+local script = contentRaw
 script = script:gsub('\\r\\n', '\n')
-script = script:gsub('\\r', '\n')
-script = script:gsub('\\n', '\n')
-script = script:gsub('\\t', '\t')
-script = script:gsub('\\/', '/')
-script = script:gsub('\\\\', '\\')
+script = script:gsub('\\r',   '\n')
+script = script:gsub('\\n',   '\n')
+script = script:gsub('\\t',   '\t')
+script = script:gsub('\\/',   '/')
+script = script:gsub('\\"',   '"')
+script = script:gsub('\\\\',  '\\')
 
 print("Script len after unescape: " .. #script)
-print("Preview: " .. script:sub(1, 200))
+print("Preview: " .. script:sub(1, 150))
 
 -- execute
 local fn, err = loadstring(script)
