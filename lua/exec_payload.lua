@@ -124,15 +124,53 @@ do
         pcall(function() rawset(cenv, "http_request", fakeReq) end)
     end
 
-    -- Set default script_key
-    local defaultKey = "BF-BYPASS-KEY-" .. tostring(math.random(1e5, 9e5))
-    ge.script_key = defaultKey
-    ge.SCRIPT_KEY = defaultKey
-    _G.script_key = defaultKey
-    _G.SCRIPT_KEY = defaultKey
+    -- Set ACTUAL SysHub Free key (bukan random)
+    local actualKey = "FREE-SYS-PQNJ-9HPK-9HHZ"
+    ge.script_key = actualKey
+    ge.SCRIPT_KEY = actualKey
+    _G.script_key = actualKey
+    _G.SCRIPT_KEY = actualKey
+    -- Set juga variasi nama yang mungkin dipakai
+    ge.Key = actualKey
+    ge.key = actualKey
+    _G.Key = actualKey
+    _G.key = actualKey
+    ge.ScriptKey = actualKey
+    _G.ScriptKey = actualKey
 
     print("[exec] Bypass injected (luarmor.net, jnkie.com)")
-    print("[exec] Default script_key: " .. defaultKey)
+    print("[exec] script_key: " .. actualKey)
+end
+
+-- ══════════════════════════════════════════════════════════════
+-- STEP 1.5: HTTP REQUEST LOGGING (capture semua traffic)
+-- ══════════════════════════════════════════════════════════════
+do
+    local _wrappedReq = ge.request or _G.request
+    if type(_wrappedReq) == "function" then
+        local loggingReq = function(opts)
+            local url = ""
+            if type(opts) == "table" then
+                url = tostring(opts.Url or opts.url or "unknown")
+            elseif type(opts) == "string" then
+                url = opts
+            end
+            print("[HTTP LOG] >>> " .. url)
+            local res = _wrappedReq(opts)
+            if res and res.Body then
+                print("[HTTP LOG] <<< " .. #res.Body .. " bytes | " .. tostring(res.Body):sub(1, 200))
+            end
+            return res
+        end
+        rawset(ge, "request", loggingReq)
+        rawset(ge, "http_request", loggingReq)
+        _G.request = loggingReq
+        _G.http_request = loggingReq
+        if syn and type(syn) == "table" then
+            rawset(syn, "request", loggingReq)
+        end
+        print("[exec] HTTP logging active")
+    end
 end
 
 -- ══════════════════════════════════════════════════════════════
