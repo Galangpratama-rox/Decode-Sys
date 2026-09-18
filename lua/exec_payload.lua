@@ -8,7 +8,7 @@
 --   3. loadstring + execute → langsung jalan
 --
 -- Cara pakai:
--- loadstring(game:HttpGet("https://raw.githubusercontent.com/ZoraRox/SAE-SYS/refs/heads/main/lua/exec_payload.lua"))()
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/Galangpratama-rox/Decode-Sys/refs/heads/main/lua/exec_payload.lua"))()
 -- ============================================================
 
 -- ── HTTP helper ──────────────────────────────────────────────
